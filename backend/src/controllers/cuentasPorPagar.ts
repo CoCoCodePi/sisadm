@@ -81,4 +81,21 @@ cuentasRouter.post(
   }
 );
 
+// Nueva ruta para alertar cuando cuentas estén próximas a vencer
+cuentasRouter.get('/alertas', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+  try {
+    const [cuentas] = await pool.query(`
+      SELECT cp.*, p.nombre AS proveedor, c.codigo_orden 
+      FROM cuentas_por_pagar cp
+      JOIN compras c ON cp.compra_id = c.id
+      JOIN proveedores p ON c.proveedor_id = p.id
+      WHERE cp.estado = 'pendiente' AND DATEDIFF(cp.fecha_vencimiento, NOW()) <= 7
+    `);
+    res.json(cuentas);
+  } catch (error) {
+    console.error('Error al obtener alertas de vencimiento:', error);
+    res.status(500).json({ message: 'Error al obtener alertas de vencimiento' });
+  }
+});
+
 export default cuentasRouter;

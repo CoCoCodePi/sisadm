@@ -29,8 +29,8 @@ comprasRouter.post('/', authenticate(['admin', 'maestro']), async (req: Request,
     // 1. Crear compra
     const [compraResult]: any[] = await conn.query(
       `INSERT INTO compras 
-      (codigo_orden, proveedor_id, moneda, tasa_cambio, fecha_esperada, total) 
-      VALUES (?, ?, ?, ?, ?, 0)`,
+      (codigo_orden, proveedor_id, moneda, tasa_cambio, fecha_esperada, total, estado) 
+      VALUES (?, ?, ?, ?, ?, 0, 'pendiente')`,
       [codigoOrden, body.proveedor_id, body.moneda, body.tasa_cambio, body.fecha_esperada]
     );
     const compraId = compraResult.insertId;
@@ -71,6 +71,66 @@ comprasRouter.post('/', authenticate(['admin', 'maestro']), async (req: Request,
   } catch (error) {
     await conn.rollback();
     res.status(500).json({ message: 'Error al registrar compra' });
+  } finally {
+    conn.release();
+  }
+});
+
+// Nueva ruta para marcar la compra como "recibida" y actualizar el stock
+comprasRouter.put('/:id/recibida', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+  const compraId = req.params.id;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1. Verificar estado de la compra
+    const [compra]: any[] = await conn.query(
+      `SELECT estado FROM compras WHERE id = ?`,
+      [compraId]
+    );
+
+    if (compra.length === 0) {
+      return res.status(404).json({ message: 'Compra no encontrada' });
+    }
+
+    if (compra[0].estado === 'recibida') {
+      return res.status(400).json({ message: 'La compra ya está marcada como recibida' });
+    }
+
+    // 2. Actualizar estado de la compra
+    await conn.query(
+      `UPDATE compras SET estado = 'recibida' WHERE id = ?`,
+      [compraId]
+    );
+
+    // 3. Actualizar inventario
+    const [detalles]: any[] = await conn.query(
+      `SELECT variante_id, cantidad FROM detalle_compras WHERE compra_id = ?`,
+      [compraId]
+    );
+
+    for (const detalle of detalles) {
+      await conn.query(
+        `UPDATE inventario 
+        SET cantidad = cantidad + ? 
+        WHERE producto_id = ?`,
+        [detalle.cantidad, detalle.variante_id]
+      );
+
+      await conn.query(
+        `INSERT INTO movimientos_inventario 
+        (producto_id, cantidad, tipo, canal, motivo) 
+        VALUES (?, ?, 'entrada', 'fisico', 'Compra recibida')`,
+        [detalle.variante_id, detalle.cantidad]
+      );
+    }
+
+    await conn.commit();
+    res.json({ success: true });
+  } catch (error) {
+    await conn.rollback();
+    res.status(500).json({ message: 'Error al marcar compra como recibida' });
   } finally {
     conn.release();
   }
