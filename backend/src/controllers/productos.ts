@@ -17,6 +17,15 @@ interface ProductoBody {
   }>;
 }
 
+// Interface para Ajuste de Precios
+interface AjustePrecios {
+  tipo: 'costo' | 'venta1' | 'venta2' | 'venta3';
+  porcentaje: number;
+  categoria_id?: number;
+  proveedor_id?: number;
+  productos?: number[];
+}
+
 // Obtener todos los productos con sus relaciones
 productosRouter.get('/', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
   try {
@@ -132,6 +141,54 @@ productosRouter.post('/', authenticate(['maestro']), async (req: Request, res: R
       success: false,
       message: 'Error al crear producto'
     });
+  } finally {
+    conn.release();
+  }
+});
+
+// Ajustes masivos de precios
+productosRouter.post('/ajustes-precios', authenticate(['maestro']), async (req: Request, res: Response) => {
+  const ajuste: AjustePrecios = req.body;
+
+  // Validación de entrada
+  if (!ajuste.tipo || !ajuste.porcentaje || (!ajuste.categoria_id && !ajuste.proveedor_id && !ajuste.productos)) {
+    return res.status(400).json({ success: false, message: 'Datos de entrada inválidos' });
+  }
+  
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    let whereClause = '';
+    const params: any[] = [ajuste.porcentaje / 100, ajuste.tipo];
+    
+    if (ajuste.categoria_id) {
+      whereClause = 'WHERE p.categoria_id = ?';
+      params.push(ajuste.categoria_id);
+    } else if (ajuste.proveedor_id) {
+      whereClause = 'WHERE p.proveedor_id = ?';
+      params.push(ajuste.proveedor_id);
+    } else if (ajuste.productos) {
+      whereClause = 'WHERE p.id IN (?)';
+      params.push(ajuste.productos);
+    }
+
+    const query = `
+      UPDATE precios pr
+      JOIN productos p ON pr.producto_id = p.id
+      SET pr.precio = pr.precio * (1 + ?)
+      ${whereClause}
+      AND pr.tipo = ?
+    `;
+
+    await conn.query(query, params);
+
+    await conn.commit();
+    res.json({ success: true });
+  } catch (error) {
+    await conn.rollback();
+    console.error('Error en ajuste:', error);
+    res.status(500).json({ success: false, message: 'Error en ajuste' });
   } finally {
     conn.release();
   }

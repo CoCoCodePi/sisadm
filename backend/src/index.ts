@@ -10,6 +10,8 @@ import ventasRouter from './controllers/ventas';
 import pagosRouter from './controllers/pagos';
 import metodosRouter from './controllers/metodosPago';
 import clientesRouter from './controllers/clientes';
+import notasRouter from './controllers/notasCredito';
+import inventarioRouter from './controllers/inventario';
 dotenv.config();
 
 const app = express();
@@ -35,6 +37,8 @@ app.use('/api/ventas', ventasRouter);
 app.use('/api/pagos', pagosRouter);
 app.use('/api/metodos', metodosRouter);
 app.use('/api/clientes', clientesRouter);
+app.use('/api/notas', notasRouter);
+app.use('/api/inventario', inventarioRouter);
 
 // Manejo de errores
 app.use(errorHandler);

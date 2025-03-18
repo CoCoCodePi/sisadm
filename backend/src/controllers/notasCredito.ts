@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/authMiddleware';
 
 const notasRouter = require('express').Router();
 
+// Crear una nueva nota de crédito
 notasRouter.post('/', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
   const { venta_id, monto, motivo } = req.body;
   
@@ -34,6 +35,49 @@ notasRouter.post('/', authenticate(['admin', 'maestro']), async (req: Request, r
     res.status(500).json({ success: false, message: 'Error al crear nota' });
   } finally {
     conn.release();
+  }
+});
+
+// Cerrar una nota de crédito
+notasRouter.patch('/:id/cerrar', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const [result]: any[] = await pool.query(
+      `UPDATE notas_credito 
+      SET estado = 'cerrada'
+      WHERE id = ?`,
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Nota no encontrada' });
+    }
+
+    res.json({ success: true, message: 'Nota cerrada' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error al cerrar nota' });
+  }
+});
+
+// Eliminar una nota de crédito
+notasRouter.delete('/:id', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const [result]: any[] = await pool.query(
+      `DELETE FROM notas_credito 
+      WHERE id = ?`,
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Nota no encontrada' });
+    }
+
+    res.json({ success: true, message: 'Nota eliminada' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error al eliminar nota' });
   }
 });
 

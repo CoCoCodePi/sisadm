@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../db';
 import { authenticate } from '../middleware/authMiddleware';
+import { generarFacturaPDF, generarFacturaXML } from '../services/facturacion';
 
 const ventasRouter = require('express').Router();
 
@@ -102,6 +103,15 @@ ventasRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (re
           [ventaId, body.moneda, body.tasa_cambio]
         );
       }
+
+    // 6. Registrar comisión
+    const porcentajeComision = 5.0; // 5% por defecto
+    await conn.query(
+      `INSERT INTO comisiones 
+      (venta_id, usuario_id, monto, porcentaje)
+      VALUES (?, ?, ?, ?)`,
+      [ventaId, usuarioId, (totalVenta * porcentajeComision) / 100, porcentajeComision]
+    );
 
     await conn.commit();
 
@@ -235,6 +245,17 @@ ventasRouter.patch('/:id/cancelar', authenticate(['admin', 'maestro']), async (r
     res.status(500).json({ success: false, message: 'Error al cancelar venta' });
   } finally {
     conn.release();
+  }
+});
+
+// Generar factura en PDF
+ventasRouter.get('/:id/factura', authenticate(['vendedor', 'admin']), async (req: Request, res: Response) => {
+  try {
+    const pdf = await generarFacturaPDF(Number(req.params.id));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.send(pdf);
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error al generar factura' });
   }
 });
 

@@ -56,4 +56,24 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   }
 });
 
+// Ejemplo de una ruta protegida
+authRouter.get('/profile', authenticate(['admin', 'maestro', 'operador']), async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id; // El middleware authenticate debería añadir el usuario al request
+    const [users] = await pool.query(
+      'SELECT id, email, rol, nombre, avatar_url FROM usuarios WHERE id = ?',
+      [userId]
+    );
+
+    if (!Array.isArray(users) || users.length === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    const user = users[0];
+    res.json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener el perfil' });
+  }
+});
+
 export default authRouter;
