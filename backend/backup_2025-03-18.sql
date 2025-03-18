@@ -15,6 +15,7 @@ Enter password:
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+mysqldump: Error: 'Access denied; you need (at least one of) the PROCESS privilege(s) for this operation' when trying to dump tablespaces
 
 --
 -- Table structure for table `auditoria`
@@ -94,7 +95,7 @@ CREATE TABLE `clientes` (
   KEY `vendedor_id` (`vendedor_id`),
   CONSTRAINT `clientes_ibfk_1` FOREIGN KEY (`vendedor_id`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_tipo_documento` FOREIGN KEY (`tipo_documento_id`) REFERENCES `tipo_documentos` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -103,8 +104,133 @@ CREATE TABLE `clientes` (
 
 LOCK TABLES `clientes` WRITE;
 /*!40000 ALTER TABLE `clientes` DISABLE KEYS */;
-INSERT INTO `clientes` VALUES (1,1,'Cliente Demo',NULL,NULL,NULL,NULL,'2025-03-14 21:57:02','','2025-03-15 15:18:45'),(4,1,'Cliente de prueba',NULL,NULL,NULL,NULL,'2025-03-15 05:32:52','123456789','2025-03-15 05:32:52'),(7,1,'Cliente A',NULL,NULL,NULL,NULL,'2025-03-15 15:26:44','22345678','2025-03-15 15:26:44'),(9,1,'Cliente A',NULL,NULL,NULL,NULL,'2025-03-15 15:28:09','12375678','2025-03-15 15:28:09'),(10,1,'Cliente B',NULL,NULL,NULL,NULL,'2025-03-15 15:28:20','12325678','2025-03-15 15:28:20'),(11,3,'Cliente A',NULL,NULL,NULL,NULL,'2025-03-15 15:28:44','12375778','2025-03-15 15:28:44'),(12,2,'Cliente B',NULL,NULL,NULL,NULL,'2025-03-15 15:28:53','12325778','2025-03-15 15:28:53'),(14,1,'Cliente D',NULL,NULL,NULL,3,'2025-03-15 15:38:36','12345678','2025-03-15 15:38:36'),(17,2,'Cliente Prueba',NULL,NULL,NULL,3,'2025-03-18 01:55:54','V12345678','2025-03-18 01:55:54');
+INSERT INTO `clientes` VALUES (1,1,'Cliente de Prueba','cliente@prueba.com','1234567890','Calle Falsa 123',3,'2025-03-18 18:22:04','J123456789','2025-03-18 18:22:04'),(3,2,'Cliente Venezolano','cliente.ven@prueba.com','1234567890','Calle Venezolana 123',3,'2025-03-18 18:25:08','V12345678','2025-03-18 18:25:08'),(4,3,'Cliente Extranjero','cliente.ext@prueba.com','1234567890','Calle Extranjera 123',3,'2025-03-18 18:25:14','E12345678','2025-03-18 18:25:14'),(8,3,'Cliente Extranjero','extranjero@cliente.com','1234509876','Calle Extranjera 789',3,'2025-03-18 18:45:25','E87654321','2025-03-18 18:45:25');
 /*!40000 ALTER TABLE `clientes` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `comisiones`
+--
+
+DROP TABLE IF EXISTS `comisiones`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `comisiones` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `venta_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `monto` decimal(16,4) NOT NULL,
+  `porcentaje` decimal(5,2) NOT NULL,
+  `fecha` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `venta_id` (`venta_id`),
+  KEY `usuario_id` (`usuario_id`),
+  CONSTRAINT `comisiones_ibfk_1` FOREIGN KEY (`venta_id`) REFERENCES `ventas` (`id`),
+  CONSTRAINT `comisiones_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `comisiones`
+--
+
+LOCK TABLES `comisiones` WRITE;
+/*!40000 ALTER TABLE `comisiones` DISABLE KEYS */;
+/*!40000 ALTER TABLE `comisiones` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `compras`
+--
+
+DROP TABLE IF EXISTS `compras`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compras` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `codigo_orden` varchar(20) NOT NULL,
+  `proveedor_id` int NOT NULL,
+  `fecha_orden` date NOT NULL,
+  `fecha_esperada` date DEFAULT NULL,
+  `fecha_recibido` date DEFAULT NULL,
+  `total` decimal(16,4) NOT NULL,
+  `moneda` enum('USD','VES') NOT NULL,
+  `tasa_cambio` decimal(16,8) NOT NULL,
+  `estado` enum('pendiente','recibida','parcial','cancelada') DEFAULT 'pendiente',
+  `creado_en` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `codigo_orden` (`codigo_orden`),
+  KEY `proveedor_id` (`proveedor_id`),
+  CONSTRAINT `compras_ibfk_1` FOREIGN KEY (`proveedor_id`) REFERENCES `proveedores` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `compras`
+--
+
+LOCK TABLES `compras` WRITE;
+/*!40000 ALTER TABLE `compras` DISABLE KEYS */;
+/*!40000 ALTER TABLE `compras` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `cuentas_por_pagar`
+--
+
+DROP TABLE IF EXISTS `cuentas_por_pagar`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `cuentas_por_pagar` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `compra_id` int NOT NULL,
+  `monto_original` decimal(16,4) NOT NULL,
+  `monto_pendiente` decimal(16,4) NOT NULL,
+  `fecha_vencimiento` date NOT NULL,
+  `estado` enum('pendiente','pagada','vencida') DEFAULT 'pendiente',
+  PRIMARY KEY (`id`),
+  KEY `compra_id` (`compra_id`),
+  CONSTRAINT `cuentas_por_pagar_ibfk_1` FOREIGN KEY (`compra_id`) REFERENCES `compras` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `cuentas_por_pagar`
+--
+
+LOCK TABLES `cuentas_por_pagar` WRITE;
+/*!40000 ALTER TABLE `cuentas_por_pagar` DISABLE KEYS */;
+/*!40000 ALTER TABLE `cuentas_por_pagar` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `detalle_compras`
+--
+
+DROP TABLE IF EXISTS `detalle_compras`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `detalle_compras` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `compra_id` int NOT NULL,
+  `variante_id` int NOT NULL,
+  `cantidad` int NOT NULL,
+  `costo_unitario` decimal(16,4) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `compra_id` (`compra_id`),
+  KEY `variante_id` (`variante_id`),
+  CONSTRAINT `detalle_compras_ibfk_1` FOREIGN KEY (`compra_id`) REFERENCES `compras` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `detalle_compras_ibfk_2` FOREIGN KEY (`variante_id`) REFERENCES `variantes` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `detalle_compras`
+--
+
+LOCK TABLES `detalle_compras` WRITE;
+/*!40000 ALTER TABLE `detalle_compras` DISABLE KEYS */;
+/*!40000 ALTER TABLE `detalle_compras` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -133,7 +259,6 @@ CREATE TABLE `detalle_metodos_pago` (
 
 LOCK TABLES `detalle_metodos_pago` WRITE;
 /*!40000 ALTER TABLE `detalle_metodos_pago` DISABLE KEYS */;
-INSERT INTO `detalle_metodos_pago` VALUES (1,1,20.0000,'USD',36.50000000),(1,2,436.8000,'VES',36.50000000);
 /*!40000 ALTER TABLE `detalle_metodos_pago` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -168,7 +293,6 @@ CREATE TABLE `detalles_venta` (
 
 LOCK TABLES `detalles_venta` WRITE;
 /*!40000 ALTER TABLE `detalles_venta` DISABLE KEYS */;
-INSERT INTO `detalles_venta` VALUES (1,1,1,2,15.9900),(2,2,1,8,15.9900),(7,7,2,5,25.0000),(8,7,3,12,30.0000);
 /*!40000 ALTER TABLE `detalles_venta` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -184,12 +308,16 @@ CREATE TABLE `devoluciones` (
   `venta_id` int NOT NULL,
   `variante_id` int NOT NULL,
   `cantidad` int NOT NULL,
-  `fecha` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `motivo` text,
+  `creado_en` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `usuario_id` int NOT NULL,
   PRIMARY KEY (`id`),
   KEY `venta_id` (`venta_id`),
   KEY `variante_id` (`variante_id`),
+  KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `devoluciones_ibfk_1` FOREIGN KEY (`venta_id`) REFERENCES `ventas` (`id`),
-  CONSTRAINT `devoluciones_ibfk_2` FOREIGN KEY (`variante_id`) REFERENCES `variantes` (`id`)
+  CONSTRAINT `devoluciones_ibfk_2` FOREIGN KEY (`variante_id`) REFERENCES `variantes` (`id`),
+  CONSTRAINT `devoluciones_ibfk_3` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -267,7 +395,7 @@ CREATE TABLE `metodos_pago` (
   `habilitado` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id`),
   UNIQUE KEY `nombre` (`nombre`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -326,12 +454,15 @@ CREATE TABLE `notas_credito` (
   `motivo` text,
   `creado_en` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `usuario_id` int NOT NULL,
+  `devolucion_id` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `venta_id` (`venta_id`),
   KEY `usuario_id` (`usuario_id`),
+  KEY `devolucion_id` (`devolucion_id`),
   CONSTRAINT `notas_credito_ibfk_1` FOREIGN KEY (`venta_id`) REFERENCES `ventas` (`id`),
-  CONSTRAINT `notas_credito_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `notas_credito_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `notas_credito_ibfk_3` FOREIGN KEY (`devolucion_id`) REFERENCES `devoluciones` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -368,7 +499,6 @@ CREATE TABLE `pagos` (
 
 LOCK TABLES `pagos` WRITE;
 /*!40000 ALTER TABLE `pagos` DISABLE KEYS */;
-INSERT INTO `pagos` VALUES (1,1,'2025-03-16 02:10:46','USD',0.00000000),(2,1,'2025-03-18 00:52:37','USD',0.00000000);
 /*!40000 ALTER TABLE `pagos` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -473,6 +603,11 @@ CREATE TABLE `proveedores` (
   `nombre` varchar(255) NOT NULL,
   `rif` varchar(20) NOT NULL,
   `telefono` varchar(15) DEFAULT NULL,
+  `direccion` text,
+  `contacto_nombre` varchar(255) DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `dias_credito` int DEFAULT '30',
+  `cuenta_bancaria` varchar(50) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `rif` (`rif`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -484,7 +619,7 @@ CREATE TABLE `proveedores` (
 
 LOCK TABLES `proveedores` WRITE;
 /*!40000 ALTER TABLE `proveedores` DISABLE KEYS */;
-INSERT INTO `proveedores` VALUES (1,'Proveedor Ejemplo','J-123456789',NULL),(2,'Proveedor Demo','J-987654321',NULL);
+INSERT INTO `proveedores` VALUES (1,'Proveedor Ejemplo','J-123456789',NULL,NULL,NULL,NULL,30,NULL),(2,'Proveedor Demo','J-987654321',NULL,NULL,NULL,NULL,30,NULL);
 /*!40000 ALTER TABLE `proveedores` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -623,7 +758,6 @@ CREATE TABLE `ventas` (
 
 LOCK TABLES `ventas` WRITE;
 /*!40000 ALTER TABLE `ventas` DISABLE KEYS */;
-INSERT INTO `ventas` VALUES (1,'VEN-20250378SQGR',1,3,31.9800,0.0000,'USD',36.50000000,0.00000000,'fisico','cancelada','2025-03-14 22:06:18'),(2,'VEN-202503LFKW6U',1,3,127.9200,127.9200,'USD',36.50000000,0.00000000,'fisico','pendiente','2025-03-14 22:54:52'),(7,'VEN-202503ZIG1NZ',1,3,485.0000,485.0000,'USD',36.50000000,0.00000000,'fisico','pendiente','2025-03-14 23:25:40');
 /*!40000 ALTER TABLE `ventas` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -654,4 +788,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-03-18  3:03:27
+-- Dump completed on 2025-03-18 23:21:52
