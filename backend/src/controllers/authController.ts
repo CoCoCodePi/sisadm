@@ -10,6 +10,10 @@ const authRouter = require('express').Router();
 authRouter.post('/login', async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Faltan campos requeridos: email, password' });
+  }
+
   try {
     const [users] = await pool.query(
       'SELECT id, email, password_hash, rol FROM usuarios WHERE email = ?',

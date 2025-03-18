@@ -134,4 +134,92 @@ clientesRouter.get('/', authenticate(['vendedor', 'admin', 'maestro']), async (r
   }
 });
 
+// Actualizar cliente
+clientesRouter.put('/:id', authenticate(['vendedor', 'admin', 'maestro']), async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const body: Partial<ClienteBody> = req.body;
+  
+  try {
+    // Verificar si el cliente existe
+    const [clienteExistente]: any[] = await pool.query(
+      'SELECT * FROM clientes WHERE id = ?',
+      [id]
+    );
+    
+    if (!clienteExistente.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cliente no encontrado'
+      });
+    }
+
+    // Actualizar cliente
+    await pool.query(
+      `UPDATE clientes SET
+      nombre = COALESCE(?, nombre),
+      email = COALESCE(?, email),
+      telefono = COALESCE(?, telefono),
+      direccion = COALESCE(?, direccion)
+      WHERE id = ?`,
+      [
+        body.nombre,
+        body.email,
+        body.telefono,
+        body.direccion,
+        id
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: 'Cliente actualizado correctamente'
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al actualizar cliente'
+    });
+  }
+});
+
+// Eliminar cliente
+clientesRouter.delete('/:id', authenticate(['vendedor', 'admin', 'maestro']), async (req: Request, res: Response) => {
+  const { id } = req.params;
+  
+  try {
+    // Verificar si el cliente existe
+    const [clienteExistente]: any[] = await pool.query(
+      'SELECT * FROM clientes WHERE id = ?',
+      [id]
+    );
+    
+    if (!clienteExistente.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cliente no encontrado'
+      });
+    }
+
+    // Eliminar cliente
+    await pool.query(
+      'DELETE FROM clientes WHERE id = ?',
+      [id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Cliente eliminado correctamente'
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al eliminar cliente'
+    });
+  }
+});
+
 export default clientesRouter;
