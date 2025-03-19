@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import pool from '../../db';
 
-const reportesRouter = require('express').Router();
+const ventasPagosRouter = require('express').Router();
 
 // Obtener detalle completo de pagos por venta
-reportesRouter.get('/ventas/:id/pagos', async (req: Request, res: Response) => {
+ventasPagosRouter.get('/:id/pagos', async (req: Request, res: Response) => {
   try {
     const [result]: any[] = await pool.query(
       `SELECT 
@@ -28,4 +28,4 @@ reportesRouter.get('/ventas/:id/pagos', async (req: Request, res: Response) => {
   }
 });
 
-export default reportesRouter;
+export default ventasPagosRouter;

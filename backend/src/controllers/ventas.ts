@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../db';
 import { authenticate } from '../middleware/authMiddleware';
-import { generarFacturaPDF, generarFacturaXML } from '../services/facturacion';
+import { generarFacturaPDF, enviarFacturaPorCorreo } from '../services/facturacion';
 
 const ventasRouter = require('express').Router();
 
@@ -31,6 +31,14 @@ interface VentaBody {
 const generarCodigoVenta = (): string => {
   const fecha = new Date();
   return `VEN-${fecha.getFullYear()}${(fecha.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+};
+
+// Generar código de factura único
+const generarCodigoFactura = (): string => {
+  const fecha = new Date();
+  return `FAC-${fecha.getFullYear()}${(fecha.getMonth() + 1)
     .toString()
     .padStart(2, '0')}${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 };
@@ -86,6 +94,13 @@ ventasRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (re
         WHERE v.id = ?`,
         [detalle.cantidad, detalle.variante_id]
       );
+
+      await conn.query(
+        `INSERT INTO movimientos_inventario 
+        (producto_id, cantidad, tipo, canal, motivo) 
+        VALUES (?, ?, 'venta', ?, 'Venta registrada')`,
+        [detalle.variante_id, detalle.cantidad, body.canal]
+      );
     }
 
     // 4. Actualizar total en venta
@@ -94,15 +109,23 @@ ventasRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (re
       [totalVenta, ventaId]
     );
 
-    // 5. Registrar pagos
+    // 5. Registrar pagos y métodos de pago
     for (const pago of body.pagos) {
-        await conn.query(
-          `INSERT INTO pagos 
-          (venta_id, moneda_base, tasa_base) 
-          VALUES (?, ?, ?)`,
-          [ventaId, body.moneda, body.tasa_cambio]
-        );
-      }
+      const [pagoResult]: any[] = await conn.query(
+        `INSERT INTO pagos 
+        (venta_id, fecha, moneda_base, tasa_base) 
+        VALUES (?, NOW(), ?, ?)`,
+        [ventaId, body.moneda, body.tasa_cambio]
+      );
+      const pagoId = pagoResult.insertId;
+
+      await conn.query(
+        `INSERT INTO detalle_metodos_pago 
+        (pago_id, metodo_pago_id, monto, moneda, tasa_cambio) 
+        VALUES (?, (SELECT id FROM metodos_pago WHERE nombre = ?), ?, ?, ?)`,
+        [pagoId, pago.metodo, pago.monto, body.moneda, body.tasa_cambio]
+      );
+    }
 
     // 6. Registrar comisión
     const porcentajeComision = 5.0; // 5% por defecto
@@ -113,11 +136,26 @@ ventasRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (re
       [ventaId, usuarioId, (totalVenta * porcentajeComision) / 100, porcentajeComision]
     );
 
+    // 7. Generar factura automáticamente
+    const codigoFactura = generarCodigoFactura();
+    const facturaBody = {
+      venta_id: ventaId,
+      cliente_id: body.cliente_id!,
+      total: totalVenta,
+      impuestos: totalVenta * 0.16, // Ejemplo de cálculo de impuestos (16% IVA)
+      estado: 'emitida',
+      codigo_factura: codigoFactura
+    };
+    const pdfBuffer = await generarFacturaPDF(facturaBody); // Asegurarse de obtener un Buffer
+
+    // Enviar la factura por correo electrónico (opcional)
+    await enviarFacturaPorCorreo(body.cliente_id!, codigoFactura, pdfBuffer);
+
     await conn.commit();
 
     res.status(201).json({
       success: true,
-      data: { codigo_venta: codigoVenta, venta_id: ventaId }
+      data: { codigo_venta: codigoVenta, venta_id: ventaId, codigo_factura: codigoFactura }
     });
 
   } catch (error: any) {
@@ -159,104 +197,3 @@ ventasRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (re
     conn.release();
   }
 });
-
-// Obtener listado de ventas
-ventasRouter.get('/', authenticate(['vendedor', 'admin', 'maestro']), async (req: Request, res: Response) => {
-  const { canal, estado, fecha_inicio, fecha_fin } = req.query;
-
-  try {
-    let query = `
-      SELECT v.*, c.nombre AS cliente, u.email AS vendedor 
-      FROM ventas v
-      LEFT JOIN clientes c ON v.cliente_id = c.id
-      INNER JOIN usuarios u ON v.usuario_id = u.id
-      WHERE 1=1
-    `;
-    const params = [];
-
-    if (canal) {
-      query += ' AND v.canal = ?';
-      params.push(canal);
-    }
-    if (estado) {
-      query += ' AND v.estado = ?';
-      params.push(estado);
-    }
-    if (fecha_inicio && fecha_fin) {
-      query += ' AND v.creado_en BETWEEN ? AND ?';
-      params.push(fecha_inicio, fecha_fin);
-    }
-
-    const [ventas] = await pool.query(query, params);
-    res.json({ success: true, data: ventas });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Error al obtener ventas' });
-  }
-});
-
-// Cancelar venta
-ventasRouter.patch('/:id/cancelar', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  const ventaId = req.params.id;
-  const conn = await pool.getConnection();
-
-  try {
-    await conn.beginTransaction();
-
-    // 1. Verificar estado actual
-    const [venta]: any[] = await conn.query(
-      `SELECT estado FROM ventas WHERE id = ? FOR UPDATE`,
-      [ventaId]
-    );
-
-    if (venta[0].estado === 'cancelada') {
-      return res.status(400).json({ message: 'La venta ya está cancelada' });
-    }
-
-    // 2. Revertir inventario
-    const [detalles]: any[] = await conn.query(
-      `SELECT dv.variante_id, dv.cantidad 
-      FROM detalles_venta dv
-      WHERE dv.venta_id = ?`,
-      [ventaId]
-    );
-
-    for (const detalle of detalles) {
-      await conn.query(
-        `UPDATE inventario i
-        INNER JOIN variantes v ON i.producto_id = v.producto_id
-        SET i.cantidad = i.cantidad + ?
-        WHERE v.id = ?`,
-        [detalle.cantidad, detalle.variante_id]
-      );
-    }
-
-    // 3. Actualizar estado
-    await conn.query(
-      `UPDATE ventas SET estado = 'cancelada' WHERE id = ?`,
-      [ventaId]
-    );
-
-    await conn.commit();
-    res.json({ success: true, message: 'Venta cancelada correctamente' });
-  } catch (error) {
-    await conn.rollback();
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Error al cancelar venta' });
-  } finally {
-    conn.release();
-  }
-});
-
-// Generar factura en PDF
-ventasRouter.get('/:id/factura', authenticate(['vendedor', 'admin']), async (req: Request, res: Response) => {
-  try {
-    const pdf = await generarFacturaPDF(Number(req.params.id));
-    res.setHeader('Content-Type', 'application/pdf');
-    res.send(pdf);
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Error al generar factura' });
-  }
-});
-
-export default ventasRouter;
