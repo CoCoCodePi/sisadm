@@ -6,6 +6,7 @@ import pool from './db';
 import authRouter from './controllers/authController';
 import productosRouter from './controllers/productos';
 import { errorHandler } from './middleware/errorHandler';
+import { apiLimiter } from './middleware/rateLimiter';
 import ventasRouter from './controllers/ventas';
 import pagosRouter from './controllers/pagos';
 import metodosRouter from './controllers/metodosPago';
@@ -31,6 +32,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
+app.use('/api/', apiLimiter); // Aplicar rate limiting
 
 // Conexión a BD
 pool.getConnection()

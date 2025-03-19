@@ -1,12 +1,14 @@
 import { Request, Response } from 'express';
 import pool from '../db';
 import { authenticate } from '../middleware/authMiddleware';
+import { audit } from '../middleware/auditMiddleware';
+import { validateProveedor } from '../middleware/validationMiddleware';
 import { generarReporteCuentasPorPagar } from '../services/reportes';
 
 const cuentasPorPagarRouter = require('express').Router();
 
 // Crear un nuevo proveedor
-cuentasPorPagarRouter.post('/proveedores', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+cuentasPorPagarRouter.post('/proveedores', authenticate(['admin', 'maestro']), validateProveedor, audit('Crear Proveedor'), async (req: Request, res: Response) => {
   const { nombre, contacto, telefono, direccion, termino_pago } = req.body;
 
   try {
@@ -37,7 +39,7 @@ cuentasPorPagarRouter.get('/proveedores', authenticate(['admin', 'maestro']), as
 });
 
 // Crear una nueva compra
-cuentasPorPagarRouter.post('/compras', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+cuentasPorPagarRouter.post('/compras', authenticate(['admin', 'maestro']), audit('Crear Compra'), async (req: Request, res: Response) => {
   const { proveedor_id, fecha, monto, productos, condiciones_pago } = req.body;
 
   try {
@@ -68,13 +70,13 @@ cuentasPorPagarRouter.get('/compras', authenticate(['admin', 'maestro']), async 
 });
 
 // Crear un nuevo pago
-cuentasPorPagarRouter.post('/pagos', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  const { compra_id, fecha_pago, monto, metodo_pago } = req.body;
+cuentasPorPagarRouter.post('/pagos', authenticate(['admin', 'maestro']), audit('Crear Pago'), async (req: Request, res: Response) => {
+  const { compra_id, fecha_pago, monto, metodo_pago, moneda } = req.body;
 
   try {
     const [result]: any[] = await pool.query(
-      `INSERT INTO pagos (compra_id, fecha_pago, monto, metodo_pago) VALUES (?, ?, ?, ?)`,
-      [compra_id, fecha_pago, monto, metodo_pago]
+      `INSERT INTO pagos (compra_id, fecha_pago, monto, metodo_pago, moneda) VALUES (?, ?, ?, ?, ?)`,
+      [compra_id, fecha_pago, monto, metodo_pago, moneda]
     );
 
     res.status(201).json({
