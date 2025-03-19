@@ -12,6 +12,13 @@ import metodosRouter from './controllers/metodosPago';
 import clientesRouter from './controllers/clientes';
 import notasRouter from './controllers/notasCredito';
 import inventarioRouter from './controllers/inventario';
+import cuadreCajaRouter from './controllers/cuadreCaja';
+import ventasPagosRouter from './controllers/reportes/ventasPagos';
+import cierreCajaRouter from './controllers/reportes/cierreCaja';
+import inventarioReportesRouter from './controllers/reportes/inventario';
+import ventasReportesRouter from './controllers/reportes/ventas';
+import cuentasPorPagarRouter from './controllers/cuentasPorPagar';
+
 dotenv.config();
 
 const app = express();
@@ -39,6 +46,12 @@ app.use('/api/metodos', metodosRouter);
 app.use('/api/clientes', clientesRouter);
 app.use('/api/notas', notasRouter);
 app.use('/api/inventario', inventarioRouter);
+app.use('/api/cuadre-caja', cuadreCajaRouter);
+app.use('/api/reportes/ventas', ventasPagosRouter);
+app.use('/api/reportes/cierre-caja', cierreCajaRouter);
+app.use('/api/reportes/inventario', inventarioReportesRouter);
+app.use('/api/reportes/ventas', ventasReportesRouter);
+app.use('/api/cuentas-por-pagar', cuentasPorPagarRouter);
 
 // Manejo de errores
 app.use(errorHandler);

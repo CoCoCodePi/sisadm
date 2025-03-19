@@ -197,3 +197,5 @@ ventasRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (re
     conn.release();
   }
 });
+
+export default ventasRouter;
