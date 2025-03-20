@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { generarReporteInventario } from '../../services/reportes';
-import { authenticate } from '../../middleware/authMiddleware';
+import { generarReporteInventario } from '../../../application/services/reportes';
+import { authenticate } from '../../../infrastructure/middlewares/authMiddleware';
 
 const inventarioReportesRouter = require('express').Router();
 

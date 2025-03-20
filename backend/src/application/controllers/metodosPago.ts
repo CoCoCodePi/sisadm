@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import pool from '../db';
+import pool from '../../infrastructure/database/db';
 
 const metodosRouter = require('express').Router();
 

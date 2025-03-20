@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import pool from '../db';
-import { authenticate } from '../middleware/authMiddleware';
+import pool from '../../infrastructure/database/db';
+import { authenticate } from '../../infrastructure/middlewares/authMiddleware';
 
 const comprasRouter = require('express').Router();
 

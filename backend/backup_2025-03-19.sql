@@ -48,6 +48,35 @@ LOCK TABLES `auditoria` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `caja_diaria`
+--
+
+DROP TABLE IF EXISTS `caja_diaria`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `caja_diaria` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `fecha` date NOT NULL,
+  `hora_apertura` timestamp NOT NULL,
+  `hora_cierre` timestamp NULL DEFAULT NULL,
+  `monto_inicial` decimal(16,4) NOT NULL,
+  `monto_final` decimal(16,4) DEFAULT NULL,
+  `estado` enum('abierta','cerrada') NOT NULL DEFAULT 'abierta',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fecha` (`fecha`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `caja_diaria`
+--
+
+LOCK TABLES `caja_diaria` WRITE;
+/*!40000 ALTER TABLE `caja_diaria` DISABLE KEYS */;
+/*!40000 ALTER TABLE `caja_diaria` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `categorias`
 --
 
@@ -279,8 +308,6 @@ CREATE TABLE `detalles_venta` (
   KEY `venta_id` (`venta_id`),
   KEY `variante_id` (`variante_id`),
   KEY `idx_variante_id` (`variante_id`),
-  KEY `idx_variante_id_test` (`variante_id`),
-  KEY `idx_variante` (`variante_id`),
   CONSTRAINT `detalles_venta_ibfk_1` FOREIGN KEY (`venta_id`) REFERENCES `ventas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `detalles_venta_ibfk_2` FOREIGN KEY (`variante_id`) REFERENCES `variantes` (`id`),
   CONSTRAINT `detalles_venta_chk_1` CHECK ((`cantidad` > 0))
@@ -331,6 +358,40 @@ LOCK TABLES `devoluciones` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `facturas`
+--
+
+DROP TABLE IF EXISTS `facturas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `facturas` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `codigo_factura` varchar(20) NOT NULL,
+  `venta_id` int NOT NULL,
+  `cliente_id` int NOT NULL,
+  `fecha_emision` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `total` decimal(16,4) NOT NULL,
+  `impuestos` decimal(16,4) NOT NULL,
+  `estado` enum('emitida','pagada','cancelada') DEFAULT 'emitida',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `codigo_factura` (`codigo_factura`),
+  KEY `venta_id` (`venta_id`),
+  KEY `cliente_id` (`cliente_id`),
+  CONSTRAINT `facturas_ibfk_1` FOREIGN KEY (`venta_id`) REFERENCES `ventas` (`id`),
+  CONSTRAINT `facturas_ibfk_2` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `facturas`
+--
+
+LOCK TABLES `facturas` WRITE;
+/*!40000 ALTER TABLE `facturas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `facturas` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `historico_tasas`
 --
 
@@ -363,11 +424,15 @@ DROP TABLE IF EXISTS `inventario`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `inventario` (
-  `producto_id` int NOT NULL,
+  `id` int NOT NULL AUTO_INCREMENT,
+  `variante_id` int NOT NULL,
   `cantidad` int NOT NULL DEFAULT '0',
-  `minimo` int NOT NULL DEFAULT '10',
-  PRIMARY KEY (`producto_id`),
-  CONSTRAINT `inventario_ibfk_1` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`),
+  `minimo` int NOT NULL DEFAULT '5',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `variante_id` (`variante_id`),
+  CONSTRAINT `inventario_ibfk_1` FOREIGN KEY (`variante_id`) REFERENCES `variantes` (`id`) ON DELETE CASCADE,
   CONSTRAINT `inventario_chk_1` CHECK ((`cantidad` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -378,7 +443,6 @@ CREATE TABLE `inventario` (
 
 LOCK TABLES `inventario` WRITE;
 /*!40000 ALTER TABLE `inventario` DISABLE KEYS */;
-INSERT INTO `inventario` VALUES (1,7,10),(2,5,10),(5,0,5);
 /*!40000 ALTER TABLE `inventario` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -404,8 +468,39 @@ CREATE TABLE `metodos_pago` (
 
 LOCK TABLES `metodos_pago` WRITE;
 /*!40000 ALTER TABLE `metodos_pago` DISABLE KEYS */;
-INSERT INTO `metodos_pago` VALUES (1,'Efectivo',1),(2,'Transferencia',1),(3,'Tarjeta de Crdito',1),(4,'Pago Movil',1);
+INSERT INTO `metodos_pago` VALUES (1,'Efectivo',1),(2,'Transferencia',1),(3,'Tarjeta de Credito',1),(4,'Pago Movil',1);
 /*!40000 ALTER TABLE `metodos_pago` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `movimientos_caja`
+--
+
+DROP TABLE IF EXISTS `movimientos_caja`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `movimientos_caja` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `fecha` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `concepto` varchar(255) NOT NULL,
+  `tipo` enum('entrada','salida') NOT NULL,
+  `monto` decimal(16,4) NOT NULL,
+  `metodo_pago` enum('efectivo','tarjeta','transferencia','mixto') NOT NULL,
+  `referencia` varchar(255) DEFAULT NULL,
+  `caja_diaria_id` int NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_movimientos_caja_caja_diaria` (`caja_diaria_id`),
+  CONSTRAINT `fk_movimientos_caja_caja_diaria` FOREIGN KEY (`caja_diaria_id`) REFERENCES `caja_diaria` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `movimientos_caja`
+--
+
+LOCK TABLES `movimientos_caja` WRITE;
+/*!40000 ALTER TABLE `movimientos_caja` DISABLE KEYS */;
+/*!40000 ALTER TABLE `movimientos_caja` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -417,18 +512,19 @@ DROP TABLE IF EXISTS `movimientos_inventario`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `movimientos_inventario` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `producto_id` int NOT NULL,
+  `variante_id` int NOT NULL,
   `cantidad` int NOT NULL,
-  `tipo` enum('venta','compra','ajuste') DEFAULT NULL,
-  `canal` enum('fisico','online') NOT NULL,
-  `fecha` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `tipo` enum('entrada','salida','ajuste') DEFAULT NULL,
+  `canal_afectado` enum('fisico','online') DEFAULT NULL,
+  `canal` enum('fisico','online') DEFAULT NULL,
+  `motivo` varchar(255) NOT NULL,
   `usuario_id` int DEFAULT NULL,
-  `venta_id` int DEFAULT NULL,
+  `fecha` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `producto_id` (`producto_id`),
-  KEY `idx_producto_fecha` (`producto_id`,`fecha`),
-  CONSTRAINT `movimientos_inventario_ibfk_1` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  KEY `variante_id` (`variante_id`),
+  KEY `idx_movimientos_tipo` (`tipo`,`canal`),
+  CONSTRAINT `movimientos_inventario_ibfk_1` FOREIGN KEY (`variante_id`) REFERENCES `variantes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Registra el canal que origin el movimiento';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -576,6 +672,7 @@ CREATE TABLE `productos` (
   UNIQUE KEY `codigo_barras` (`codigo_barras`),
   KEY `categoria_id` (`categoria_id`),
   KEY `proveedor_id` (`proveedor_id`),
+  KEY `idx_productos_proveedor` (`proveedor_id`),
   CONSTRAINT `productos_ibfk_1` FOREIGN KEY (`categoria_id`) REFERENCES `categorias` (`id`),
   CONSTRAINT `productos_ibfk_2` FOREIGN KEY (`proveedor_id`) REFERENCES `proveedores` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -633,7 +730,8 @@ SET @saved_cs_client     = @@character_set_client;
 /*!50503 SET character_set_client = utf8mb4 */;
 /*!50001 CREATE VIEW `stock_disponible` AS SELECT 
  1 AS `variante_id`,
- 1 AS `disponible`*/;
+ 1 AS `total`,
+ 1 AS `minimo`*/;
 SET character_set_client = @saved_cs_client;
 
 --
@@ -658,7 +756,7 @@ CREATE TABLE `tipo_documentos` (
 
 LOCK TABLES `tipo_documentos` WRITE;
 /*!40000 ALTER TABLE `tipo_documentos` DISABLE KEYS */;
-INSERT INTO `tipo_documentos` VALUES (1,'J','RIF Jurdico'),(2,'V','Cdula Venezolana'),(3,'E','Cdula Extranjera'),(4,'P','Pasaporte');
+INSERT INTO `tipo_documentos` VALUES (1,'J','RIF Jurdico'),(2,'V','Cedula Venezolana'),(3,'E','Cedula Extranjera'),(4,'P','Pasaporte');
 /*!40000 ALTER TABLE `tipo_documentos` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -742,11 +840,13 @@ CREATE TABLE `ventas` (
   `canal` enum('fisico','online') NOT NULL,
   `estado` enum('pendiente','completada','cancelada') DEFAULT 'pendiente',
   `creado_en` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `total_ves` decimal(16,4) GENERATED ALWAYS AS (round((`total` * `tasa_cambio_real`),4)) STORED,
   PRIMARY KEY (`id`),
   UNIQUE KEY `codigo_venta` (`codigo_venta`),
   KEY `cliente_id` (`cliente_id`),
   KEY `usuario_id` (`usuario_id`),
   KEY `idx_cliente_estado` (`cliente_id`,`estado`),
+  KEY `idx_ventas_canal` (`canal`),
   CONSTRAINT `ventas_ibfk_1` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`),
   CONSTRAINT `ventas_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -774,7 +874,7 @@ UNLOCK TABLES;
 /*!50001 SET collation_connection      = latin1_swedish_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
-/*!50001 VIEW `stock_disponible` AS select `v`.`id` AS `variante_id`,(`i`.`cantidad` - coalesce(sum((case when (`ve`.`estado` not in ('cancelada','completada')) then `dv`.`cantidad` else 0 end)),0)) AS `disponible` from (((`variantes` `v` join `inventario` `i` on((`v`.`producto_id` = `i`.`producto_id`))) left join `detalles_venta` `dv` on((`v`.`id` = `dv`.`variante_id`))) left join `ventas` `ve` on((`dv`.`venta_id` = `ve`.`id`))) group by `v`.`id` */;
+/*!50001 VIEW `stock_disponible` AS select `v`.`id` AS `variante_id`,`i`.`cantidad` AS `total`,`i`.`minimo` AS `minimo` from (`variantes` `v` left join `inventario` `i` on((`v`.`id` = `i`.`variante_id`))) */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
@@ -788,4 +888,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-03-18 23:21:52
+-- Dump completed on 2025-03-19 19:54:30

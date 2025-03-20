@@ -1,7 +1,7 @@
 import pdfkit from 'pdfkit';
 import { format } from 'date-fns';
 import nodemailer from 'nodemailer';
-import pool from '../db';
+import pool from '../../infrastructure/database/db';
 
 // Generar PDF de la factura
 export const generarFacturaPDF = async (facturaBody: any): Promise<Buffer> => {

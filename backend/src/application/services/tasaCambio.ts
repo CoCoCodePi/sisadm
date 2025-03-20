@@ -1,5 +1,5 @@
 import axios from 'axios';
-import pool from '../db';
+import pool from '../../infrastructure/database/db';
 
 const TASA_MAX_DIFF = 2.0; // Máxima diferencia permitida vs tasa oficial
 
