@@ -1,5 +1,5 @@
 import pdfkit from 'pdfkit';
-import pool from '../../infrastructure/database/db';
+import pool from '../db';
 import { format } from 'date-fns';
 
 // Generar reporte de cierre de caja

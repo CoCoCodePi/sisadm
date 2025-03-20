@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
-import pool from '../../infrastructure/database/db';
-import { authenticate } from '../../infrastructure/middlewares/authMiddleware';
-import { audit } from '../../infrastructure/middlewares/auditMiddleware';
-import { validateProveedor } from '../../infrastructure/middlewares/validationMiddleware';
-import { generarReporteCuentasPorPagar } from '../../application/services/reportes';
+import pool from '../db';
+import { authenticate } from '../middleware/authMiddleware';
+import { audit } from '../middleware/auditMiddleware';
+import { validateProveedor } from '../middleware/validationMiddleware';
+import { generarReporteCuentasPorPagar } from '../services/reportes';
 
 const cuentasPorPagarRouter = require('express').Router();
 

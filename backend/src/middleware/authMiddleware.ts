@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import pool from '../../infrastructure/database/db';
+import pool from '../db';
 
 export const authenticate = (roles: string[]) => {
   return async (req: Request, res: Response, next: NextFunction) => {

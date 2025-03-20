@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import pool from '../../infrastructure/database/db';
+import pool from '../db';
 
 export const audit = (action: string) => {
   return async (req: Request, res: Response, next: NextFunction) => {

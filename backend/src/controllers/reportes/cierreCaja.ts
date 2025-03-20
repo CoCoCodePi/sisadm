@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { generarReporteCierreCaja } from '../../../application/services/reportes';
-import { authenticate } from '../../../infrastructure/middlewares/authMiddleware';
+import { generarReporteCierreCaja } from '../../services/reportes';
+import { authenticate } from '../../middleware/authMiddleware';
 
 const cierreCajaRouter = require('express').Router();
 
