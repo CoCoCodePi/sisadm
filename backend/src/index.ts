@@ -5,8 +5,6 @@ import dotenv from 'dotenv';
 import pool from './db';
 import authRouter from './controllers/authController';
 import productosRouter from './controllers/productos';
-import { errorHandler } from './middleware/errorHandler';
-import { apiLimiter } from './middleware/rateLimiter';
 import ventasRouter from './controllers/ventas';
 import pagosRouter from './controllers/pagos';
 import metodosRouter from './controllers/metodosPago';
@@ -19,6 +17,9 @@ import cierreCajaRouter from './controllers/reportes/cierreCaja';
 import inventarioReportesRouter from './controllers/reportes/inventario';
 import ventasReportesRouter from './controllers/reportes/ventas';
 import cuentasPorPagarRouter from './controllers/cuentasPorPagar';
+import dashboardRouter from './controllers/dashboard';
+import { errorHandler } from './middleware/errorHandler';
+import { apiLimiter } from './middleware/rateLimiter';
 
 dotenv.config();
 
@@ -54,6 +55,7 @@ app.use('/api/reportes/cierre-caja', cierreCajaRouter);
 app.use('/api/reportes/inventario', inventarioReportesRouter);
 app.use('/api/reportes/ventas', ventasReportesRouter);
 app.use('/api/cuentas-por-pagar', cuentasPorPagarRouter);
+app.use('/api/dashboard', dashboardRouter); // Añadir rutas del dashboard
 
 // Manejo de errores
 app.use(errorHandler);

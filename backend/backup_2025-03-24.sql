@@ -304,12 +304,17 @@ CREATE TABLE `detalles_venta` (
   `variante_id` int NOT NULL,
   `cantidad` int NOT NULL,
   `precio_unitario` decimal(16,4) NOT NULL,
+  `moneda` enum('USD','VES') NOT NULL,
+  `tasa_cambio` decimal(16,8) NOT NULL,
   PRIMARY KEY (`id`),
   KEY `venta_id` (`venta_id`),
   KEY `variante_id` (`variante_id`),
   KEY `idx_variante_id` (`variante_id`),
+  KEY `idx_detalle_venta_producto` (`venta_id`,`variante_id`),
   CONSTRAINT `detalles_venta_ibfk_1` FOREIGN KEY (`venta_id`) REFERENCES `ventas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `detalles_venta_ibfk_2` FOREIGN KEY (`variante_id`) REFERENCES `variantes` (`id`),
+  CONSTRAINT `chk_cantidad_positiva` CHECK ((`cantidad` > 0)),
+  CONSTRAINT `chk_precio_positivo` CHECK ((`precio_unitario` > 0)),
   CONSTRAINT `detalles_venta_chk_1` CHECK ((`cantidad` > 0))
 ) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -322,6 +327,29 @@ LOCK TABLES `detalles_venta` WRITE;
 /*!40000 ALTER TABLE `detalles_venta` DISABLE KEYS */;
 /*!40000 ALTER TABLE `detalles_venta` ENABLE KEYS */;
 UNLOCK TABLES;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = latin1 */ ;
+/*!50003 SET character_set_results = latin1 */ ;
+/*!50003 SET collation_connection  = latin1_swedish_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER `actualizar_total_venta` AFTER INSERT ON `detalles_venta` FOR EACH ROW BEGIN
+    UPDATE ventas v
+    SET v.total_pendiente = (
+        SELECT SUM(dv.precio_unitario * dv.cantidad / dv.tasa_cambio)
+        FROM detalles_venta dv
+        WHERE dv.venta_id = NEW.venta_id
+    )
+    WHERE v.id = NEW.venta_id;
+END */;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 
 --
 -- Table structure for table `devoluciones`
@@ -389,6 +417,35 @@ CREATE TABLE `facturas` (
 LOCK TABLES `facturas` WRITE;
 /*!40000 ALTER TABLE `facturas` DISABLE KEYS */;
 /*!40000 ALTER TABLE `facturas` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `historico_precios`
+--
+
+DROP TABLE IF EXISTS `historico_precios`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `historico_precios` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `variante_id` int NOT NULL,
+  `precio` decimal(16,4) NOT NULL,
+  `moneda` enum('USD','VES') NOT NULL,
+  `fecha_inicio` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `fecha_fin` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `variante_id` (`variante_id`),
+  CONSTRAINT `historico_precios_ibfk_1` FOREIGN KEY (`variante_id`) REFERENCES `variantes` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `historico_precios`
+--
+
+LOCK TABLES `historico_precios` WRITE;
+/*!40000 ALTER TABLE `historico_precios` DISABLE KEYS */;
+/*!40000 ALTER TABLE `historico_precios` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -832,7 +889,6 @@ CREATE TABLE `ventas` (
   `codigo_venta` varchar(20) NOT NULL,
   `cliente_id` int DEFAULT NULL,
   `usuario_id` int NOT NULL,
-  `total` decimal(16,4) NOT NULL,
   `total_pendiente` decimal(16,4) NOT NULL DEFAULT '0.0000',
   `moneda` enum('USD','VES') NOT NULL,
   `tasa_cambio` decimal(16,8) NOT NULL,
@@ -840,13 +896,13 @@ CREATE TABLE `ventas` (
   `canal` enum('fisico','online') NOT NULL,
   `estado` enum('pendiente','completada','cancelada') DEFAULT 'pendiente',
   `creado_en` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `total_ves` decimal(16,4) GENERATED ALWAYS AS (round((`total` * `tasa_cambio_real`),4)) STORED,
   PRIMARY KEY (`id`),
   UNIQUE KEY `codigo_venta` (`codigo_venta`),
   KEY `cliente_id` (`cliente_id`),
   KEY `usuario_id` (`usuario_id`),
   KEY `idx_cliente_estado` (`cliente_id`,`estado`),
   KEY `idx_ventas_canal` (`canal`),
+  KEY `idx_ventas_fecha_cliente` (`creado_en`,`cliente_id`),
   CONSTRAINT `ventas_ibfk_1` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`),
   CONSTRAINT `ventas_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -860,6 +916,21 @@ LOCK TABLES `ventas` WRITE;
 /*!40000 ALTER TABLE `ventas` DISABLE KEYS */;
 /*!40000 ALTER TABLE `ventas` ENABLE KEYS */;
 UNLOCK TABLES;
+
+--
+-- Temporary view structure for view `ventas_totales`
+--
+
+DROP TABLE IF EXISTS `ventas_totales`;
+/*!50001 DROP VIEW IF EXISTS `ventas_totales`*/;
+SET @saved_cs_client     = @@character_set_client;
+/*!50503 SET character_set_client = utf8mb4 */;
+/*!50001 CREATE VIEW `ventas_totales` AS SELECT 
+ 1 AS `id`,
+ 1 AS `codigo_venta`,
+ 1 AS `total_base`,
+ 1 AS `total_usd`*/;
+SET character_set_client = @saved_cs_client;
 
 --
 -- Final view structure for view `stock_disponible`
@@ -878,6 +949,24 @@ UNLOCK TABLES;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `ventas_totales`
+--
+
+/*!50001 DROP VIEW IF EXISTS `ventas_totales`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = latin1 */;
+/*!50001 SET character_set_results     = latin1 */;
+/*!50001 SET collation_connection      = latin1_swedish_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `ventas_totales` AS select `v`.`id` AS `id`,`v`.`codigo_venta` AS `codigo_venta`,sum((`dv`.`precio_unitario` * `dv`.`cantidad`)) AS `total_base`,sum(((`dv`.`precio_unitario` * `dv`.`cantidad`) / `dv`.`tasa_cambio`)) AS `total_usd` from (`ventas` `v` join `detalles_venta` `dv` on((`v`.`id` = `dv`.`venta_id`))) group by `v`.`id` */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -888,4 +977,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-03-19 19:54:30
+-- Dump completed on 2025-03-24 18:00:05

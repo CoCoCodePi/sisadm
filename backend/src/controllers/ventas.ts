@@ -10,6 +10,8 @@ interface DetalleVenta {
   variante_id: number;
   cantidad: number;
   precio_unitario: number;
+  moneda: 'USD' | 'VES';
+  tasa_cambio: number;
 }
 
 interface Pago {
@@ -68,7 +70,7 @@ ventasRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (re
     const codigoVenta = generarCodigoVenta();
     const [ventaResult]: any[] = await conn.query(
       `INSERT INTO ventas 
-      (codigo_venta, cliente_id, usuario_id, total, moneda, tasa_cambio, canal)
+      (codigo_venta, cliente_id, usuario_id, total_pendiente, moneda, tasa_cambio, canal)
       VALUES (?, ?, ?, 0, ?, ?, ?)`, // Total calculado después
       [codigoVenta, body.cliente_id, usuarioId, body.moneda, body.tasa_cambio, body.canal]
     );
@@ -79,9 +81,9 @@ ventasRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (re
     for (const detalle of body.detalles) {
       await conn.query(
         `INSERT INTO detalles_venta 
-        (venta_id, variante_id, cantidad, precio_unitario)
-        VALUES (?, ?, ?, ?)`,
-        [ventaId, detalle.variante_id, detalle.cantidad, detalle.precio_unitario]
+        (venta_id, variante_id, cantidad, precio_unitario, moneda, tasa_cambio)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+        [ventaId, detalle.variante_id, detalle.cantidad, detalle.precio_unitario, detalle.moneda, detalle.tasa_cambio]
       );
 
       totalVenta += detalle.cantidad * detalle.precio_unitario;
@@ -105,7 +107,7 @@ ventasRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (re
 
     // 4. Actualizar total en venta
     await conn.query(
-      `UPDATE ventas SET total = ? WHERE id = ?`,
+      `UPDATE ventas SET total_pendiente = ? WHERE id = ?`,
       [totalVenta, ventaId]
     );
 

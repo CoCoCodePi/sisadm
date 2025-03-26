@@ -46,8 +46,14 @@ inventarioRouter.post('/variantes', authenticate(['admin', 'maestro']), async (r
       [producto_id, nombre, precio, stock]
     );
 
+    // Registrar precio en el historial de precios
+    await pool.query(
+      `INSERT INTO historico_precios (variante_id, precio, moneda) VALUES (?, ?, 'USD')`,
+      [result.insertId, precio]
+    );
+
     res.status(201).json({
-      success: true,
+      success: true, 
       data: { id: result.insertId }
     });
   } catch (error) {
@@ -121,6 +127,37 @@ inventarioRouter.get('/reporte', authenticate(['admin', 'maestro']), async (req:
   } catch (error) {
     console.error('Error al generar reporte de inventario:', error);
     res.status(500).json({ success: false, message: 'Error interno al generar el reporte de inventario' });
+  }
+});
+
+// Actualizar precio de una variante
+inventarioRouter.post('/variantes/precio', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+  const { variante_id, precio, moneda } = req.body;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Actualizar fecha_fin del precio anterior
+    await conn.query(
+      `UPDATE historico_precios SET fecha_fin = NOW() WHERE variante_id = ? AND fecha_fin IS NULL`,
+      [variante_id]
+    );
+
+    // Insertar nuevo precio en historico_precios
+    await conn.query(
+      `INSERT INTO historico_precios (variante_id, precio, moneda) VALUES (?, ?, ?)`,
+      [variante_id, precio, moneda]
+    );
+
+    await conn.commit();
+    res.status(200).json({ success: true, message: 'Precio actualizado correctamente' });
+  } catch (error) {
+    await conn.rollback();
+    console.error('Error al actualizar precio:', error);
+    res.status(500).json({ success: false, message: 'Error al actualizar precio' });
+  } finally {
+    conn.release();
   }
 });
 

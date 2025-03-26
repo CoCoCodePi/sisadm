@@ -7,6 +7,7 @@ const clientesRouter = require('express').Router();
 // Tipos TypeScript
 interface ClienteBody {
   tipo_documento_id: number;
+  tipo_documento: string; // Añadir este campo
   documento: string;
   nombre: string;
   email?: string;
@@ -42,8 +43,8 @@ clientesRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (
   try {
     // Validar existencia del tipo de documento
     const [tipoDoc]: any[] = await pool.query(
-      'SELECT id FROM tipo_documentos WHERE id = ?',
-      [body.tipo_documento_id]
+      'SELECT id FROM tipo_documentos WHERE codigo = ?',
+      [body.tipo_documento]
     );
     
     if (!tipoDoc.length) {
@@ -54,7 +55,7 @@ clientesRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (
     }
 
     // Validar formato del documento
-    if (!(await validarDocumento(body.tipo_documento_id, body.documento))) {
+    if (!(await validarDocumento(tipoDoc[0].id, body.documento))) {
       return res.status(400).json({
         success: false,
         message: 'Formato de documento incorrecto'
@@ -67,7 +68,7 @@ clientesRouter.post('/', authenticate(['vendedor', 'admin', 'maestro']), async (
       (tipo_documento_id, documento, nombre, email, telefono, direccion, vendedor_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        body.tipo_documento_id,
+        tipoDoc[0].id,
         body.documento.replace(/-/g, '').toUpperCase(),
         body.nombre,
         body.email,
@@ -215,10 +216,20 @@ clientesRouter.delete('/:id', authenticate(['vendedor', 'admin', 'maestro']), as
 
   } catch (error) {
     console.error(error);
-    res.status(500).json({
+    res.status (500).json({
       success: false,
       message: 'Error al eliminar cliente'
     });
+  }
+});
+
+// Obtener todos los clientes
+clientesRouter.get('/', async (req: Request, res: Response) => {
+  try {
+    const [clientes] = await pool.query('SELECT * FROM clientes');
+    res.json({ success: true, data: clientes });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener clientes' });
   }
 });
 
