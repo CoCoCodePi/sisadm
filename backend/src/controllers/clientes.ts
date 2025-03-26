@@ -157,12 +157,16 @@ clientesRouter.put('/:id', authenticate(['vendedor', 'admin', 'maestro']), async
     // Actualizar cliente
     await pool.query(
       `UPDATE clientes SET
+      tipo_documento_id = COALESCE((SELECT id FROM tipo_documentos WHERE codigo = ?), tipo_documento_id),
+      documento = COALESCE(?, documento),
       nombre = COALESCE(?, nombre),
       email = COALESCE(?, email),
       telefono = COALESCE(?, telefono),
       direccion = COALESCE(?, direccion)
       WHERE id = ?`,
       [
+        body.tipo_documento,
+        body.documento ? body.documento.replace(/-/g, '').toUpperCase() : null,
         body.nombre,
         body.email,
         body.telefono,
@@ -216,7 +220,7 @@ clientesRouter.delete('/:id', authenticate(['vendedor', 'admin', 'maestro']), as
 
   } catch (error) {
     console.error(error);
-    res.status (500).json({
+    res.status(500).json({
       success: false,
       message: 'Error al eliminar cliente'
     });
