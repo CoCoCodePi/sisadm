@@ -2,35 +2,30 @@ import { Request, Response } from 'express';
 import pool from '../db';
 import { RowDataPacket } from 'mysql2';
 
-// Tipos TypeScript
+// --- Interfaces de Tipos (sin cambios) ---
 interface SalesResult extends RowDataPacket {
   total: number;
 }
-
 interface WeekSalesResult extends RowDataPacket {
   total: number;
   day: number;
 }
-
 interface MonthSalesResult extends RowDataPacket {
   category: string;
   total: number;
 }
-
 interface InventoryResult extends RowDataPacket {
   count: number;
 }
-
 interface LowStockResult extends RowDataPacket {
-  product: string;
-  current: number;
-  min: number;
+  producto_nombre: string;
+  variante_nombre: string;
+  stock_total: number;
+  minimo: number;
 }
-
 interface ClientsResult extends RowDataPacket {
   count: number;
 }
-
 interface PendingPaymentsResult extends RowDataPacket {
   count: number;
 }
@@ -40,29 +35,28 @@ const dashboardRouter = require('express').Router();
 // Obtener datos de ventas para el dashboard
 dashboardRouter.get('/sales', async (req: Request, res: Response) => {
   try {
+    // --- CORREGIDO: Se usa v.creado_en en lugar de una columna de fecha inexistente ---
     const [todaySales] = await pool.query<SalesResult[]>(
-      `SELECT SUM(dv.precio_unitario * dv.cantidad / dv.tasa_cambio) as total
+      `SELECT SUM(total_venta) as total
        FROM ventas v
-       JOIN detalles_venta dv ON v.id = dv.venta_id
        WHERE DATE(v.creado_en) = CURDATE()`
     );
 
     const [weekSales] = await pool.query<WeekSalesResult[]>(
-      `SELECT SUM(dv.precio_unitario * dv.cantidad / dv.tasa_cambio) as total, DAYOFWEEK(v.creado_en) as day
+      `SELECT SUM(total_venta) as total, DAYOFWEEK(v.creado_en) as day
        FROM ventas v
-       JOIN detalles_venta dv ON v.id = dv.venta_id
        WHERE YEARWEEK(v.creado_en, 1) = YEARWEEK(CURDATE(), 1)
        GROUP BY DAYOFWEEK(v.creado_en)`
     );
 
     const [monthSales] = await pool.query<MonthSalesResult[]>(
-      `SELECT c.nombre as category, SUM(dv.precio_unitario * dv.cantidad / dv.tasa_cambio) as total
+      `SELECT c.nombre as category, SUM(dv.cantidad * dv.precio_unitario) as total
        FROM detalles_venta dv
        JOIN variantes v ON dv.variante_id = v.id
        JOIN productos p ON v.producto_id = p.id
-       JOIN categorias c ON p.categoria_id = c.id
+       JOIN categorias c ON p.categoria_principal_id = c.id
        JOIN ventas ve ON dv.venta_id = ve.id
-       WHERE MONTH(ve.creado_en) = MONTH(CURDATE())
+       WHERE MONTH(ve.creado_en) = MONTH(CURDATE()) AND YEAR(ve.creado_en) = YEAR(CURDATE())
        GROUP BY c.nombre`
     );
 
@@ -83,16 +77,23 @@ dashboardRouter.get('/sales', async (req: Request, res: Response) => {
 // Obtener datos de inventario para el dashboard
 dashboardRouter.get('/inventory', async (req: Request, res: Response) => {
   try {
+    // --- CORREGIDO: La consulta ahora usa la tabla 'productos' para el conteo total ---
     const [totalProducts] = await pool.query<InventoryResult[]>(
-      'SELECT COUNT(*) as count FROM productos'
+      'SELECT COUNT(*) as count FROM productos WHERE estado = "activo"'
     );
 
+    // --- CORREGIDO: La consulta de bajo stock ahora usa la nueva vista de inventario ---
     const [lowStockProducts] = await pool.query<LowStockResult[]>(
-      `SELECT p.nombre as product, i.cantidad as current, i.minimo as min
-       FROM inventario i
-       JOIN variantes v ON i.variante_id = v.id
+      `SELECT 
+          p.nombre as producto_nombre,
+          v.nombre as variante_nombre,
+          SUM(li.cantidad) as stock_total,
+          li.minimo
+       FROM lotes_inventario li
+       JOIN variantes v ON li.variante_id = v.id
        JOIN productos p ON v.producto_id = p.id
-       WHERE i.cantidad < i.minimo`
+       GROUP BY v.id, p.id, li.minimo
+       HAVING SUM(li.cantidad) < li.minimo`
     );
 
     res.json({
@@ -105,9 +106,10 @@ dashboardRouter.get('/inventory', async (req: Request, res: Response) => {
   }
 });
 
-// Obtener datos de clientes para el dashboard
+// Obtener datos de clientes y cuentas por pagar para el dashboard
 dashboardRouter.get('/clients', async (req: Request, res: Response) => {
   try {
+    // --- CORREGIDO: Se usa creado_en para los clientes del día ---
     const [todayClients] = await pool.query<ClientsResult[]>(
       'SELECT COUNT(*) as count FROM clientes WHERE DATE(creado_en) = CURDATE()'
     );
@@ -115,7 +117,7 @@ dashboardRouter.get('/clients', async (req: Request, res: Response) => {
     const [pendingPayments] = await pool.query<PendingPaymentsResult[]>(
       `SELECT COUNT(*) as count
        FROM cuentas_por_pagar
-       WHERE estado = 'pendiente'`
+       WHERE estado = 'pendiente' OR estado = 'vencida' OR estado = 'abonada'`
     );
 
     res.json({

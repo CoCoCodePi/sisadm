@@ -23,7 +23,7 @@ import { useAuth } from "../contexts/AuthContext";
 import ClientForm from "../components/ClientForm";
 import { useSnackbar } from "notistack";
 import apiClient from "../api/client";
-import { Client } from "../types/client";
+import { Client } from "../types/cliente";
 
 const ClientManagementPage = () => {
   const { user } = useAuth();

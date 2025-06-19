@@ -3,5 +3,5 @@ export type User = {
   email: string;
   nombre: string;
   rol: "maestro" | "admin" | "vendedor";
-  password?: string; // Campo opcional
+  password?: string;
 };

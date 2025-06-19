@@ -6,36 +6,32 @@ import pool from './db';
 import authRouter from './controllers/authController';
 import productosRouter from './controllers/productos';
 import ventasRouter from './controllers/ventas';
-import pagosRouter from './controllers/pagos';
-import metodosRouter from './controllers/metodosPago';
+import metodosPagoRouter from './controllers/metodosPago';
 import clientesRouter from './controllers/clientes';
-import notasRouter from './controllers/notasCredito';
 import inventarioRouter from './controllers/inventario';
-import cuadreCajaRouter from './controllers/cuadreCaja';
-import ventasPagosRouter from './controllers/reportes/ventasPagos';
-import cierreCajaRouter from './controllers/reportes/cierreCaja';
-import inventarioReportesRouter from './controllers/reportes/inventario';
-import ventasReportesRouter from './controllers/reportes/ventas';
 import cuentasPorPagarRouter from './controllers/cuentasPorPagar';
+import cuentasPorCobrarRouter from './controllers/cuentasPorCobrar';
 import dashboardRouter from './controllers/dashboard';
+import reportesRouter from './controllers/reportes'; // <-- IMPORTACIÓN AÑADIDA
 import { errorHandler } from './middleware/errorHandler';
 import { apiLimiter } from './middleware/rateLimiter';
+import proveedoresRouter from './controllers/proveedores';
+import categoriasRouter from './controllers/categorias';
+import unidadesMedidaRouter from './controllers/unidadesMedida';
+import marcasRouter from './controllers/marcas';
+import comprasRouter from './controllers/compras';
+import tasasRouter from './controllers/tasas';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middlewares
-app.use(cors({
-  origin: 'http://localhost:5173',
-  credentials: true
-}));
+app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
-app.use('/api/', apiLimiter); // Aplicar rate limiting
+app.use('/api/', apiLimiter);
 
-// Conexión a BD
 pool.getConnection()
   .then(() => console.log('✅ Conectado a MySQL'))
   .catch(err => console.error('❌ Error de conexión a MySQL:', err));
@@ -44,20 +40,20 @@ pool.getConnection()
 app.use('/api/auth', authRouter);
 app.use('/api/productos', productosRouter);
 app.use('/api/ventas', ventasRouter);
-app.use('/api/pagos', pagosRouter);
-app.use('/api/metodos', metodosRouter);
+app.use('/api/metodos-pago', metodosPagoRouter);
 app.use('/api/clientes', clientesRouter);
-app.use('/api/notas', notasRouter);
 app.use('/api/inventario', inventarioRouter);
-app.use('/api/cuadre-caja', cuadreCajaRouter);
-app.use('/api/reportes/ventas', ventasPagosRouter);
-app.use('/api/reportes/cierre-caja', cierreCajaRouter);
-app.use('/api/reportes/inventario', inventarioReportesRouter);
-app.use('/api/reportes/ventas', ventasReportesRouter);
 app.use('/api/cuentas-por-pagar', cuentasPorPagarRouter);
-app.use('/api/dashboard', dashboardRouter); // Añadir rutas del dashboard
+app.use('/api/cuentas-por-cobrar', cuentasPorCobrarRouter);
+app.use('/api/dashboard', dashboardRouter);
+app.use('/api/reportes', reportesRouter); // <-- RUTA REGISTRADA
+app.use('/api/proveedores', proveedoresRouter);
+app.use('/api/categorias', categoriasRouter);
+app.use('/api/marcas', marcasRouter);
+app.use('/api/unidades-medida', unidadesMedidaRouter);
+app.use('/api/compras', comprasRouter);
+app.use('/api/tasas', tasasRouter);
 
-// Manejo de errores
 app.use(errorHandler);
 
 app.listen(PORT, () => {

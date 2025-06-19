@@ -1,117 +1,164 @@
 import { Request, Response } from 'express';
 import pool from '../db';
 import { authenticate } from '../middleware/authMiddleware';
-import { audit } from '../middleware/auditMiddleware';
-import { validateProveedor } from '../middleware/validationMiddleware';
-import { generarReporteCuentasPorPagar } from '../services/reportes';
+import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 
 const cuentasPorPagarRouter = require('express').Router();
 
-// Crear un nuevo proveedor
-cuentasPorPagarRouter.post('/proveedores', authenticate(['admin', 'maestro']), validateProveedor, audit('Crear Proveedor'), async (req: Request, res: Response) => {
-  const { nombre, contacto, telefono, direccion, termino_pago } = req.body;
+interface PagoBody {
+    fecha_pago: string;
+    observacion?: string;
+    detalles: {
+        metodo_pago_id: number;
+        monto: number;
+        moneda: 'USD' | 'VES';
+        tasa_cambio?: number;
+        referencia?: string;
+    }[];
+}
 
-  try {
-    const [result]: any[] = await pool.query(
-      `INSERT INTO proveedores (nombre, contacto, telefono, direccion, termino_pago) VALUES (?, ?, ?, ?, ?)`,
-      [nombre, contacto, telefono, direccion, termino_pago]
-    );
+// GET /api/cuentas-por-pagar - Listar todas las cuentas por pagar con filtro
+cuentasPorPagarRouter.get('/', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+    const { tipo = 'pendientes' } = req.query; 
 
-    res.status(201).json({
-      success: true,
-      data: { id: result.insertId }
-    });
-  } catch (error) {
-    console.error('Error al crear proveedor:', error);
-    res.status(500).json({ success: false, message: 'Error interno al crear el proveedor' });
-  }
+    let whereClause = "WHERE cpp.estado IN ('pendiente', 'vencida', 'abonada')";
+    if (tipo === 'historial') {
+        whereClause = "WHERE cpp.estado IN ('pagada', 'anulada')";
+    }
+
+    try {
+        const query = `
+            SELECT 
+                cpp.id, cpp.monto_original, cpp.monto_pendiente, cpp.fecha_vencimiento, cpp.estado,
+                c.id as compra_id, c.codigo_orden,
+                p.nombre as proveedor_nombre
+            FROM cuentas_por_pagar cpp
+            JOIN compras c ON cpp.compra_id = c.id
+            JOIN proveedores p ON c.proveedor_id = p.id
+            ${whereClause}
+            ORDER BY cpp.fecha_vencimiento ASC;
+        `;
+        const [cuentas] = await pool.query(query);
+        res.json({ success: true, data: cuentas });
+    } catch (error) {
+        console.error("--- ERROR EN GET /api/cuentas-por-pagar ---", error);
+        res.status(500).json({ success: false, message: 'Error del servidor al obtener las cuentas por pagar.' });
+    }
 });
 
-// Obtener todos los proveedores
-cuentasPorPagarRouter.get('/proveedores', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  try {
-    const [proveedores]: any[] = await pool.query(`SELECT * FROM proveedores`);
-    res.json({ success: true, data: proveedores });
-  } catch (error) {
-    console.error('Error al obtener proveedores:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener proveedores' });
-  }
+// GET /api/cuentas-por-pagar/:id - Obtener el detalle de una cuenta
+cuentasPorPagarRouter.get('/:id', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        const cuentaQuery = `
+            SELECT 
+                cpp.*, 
+                c.codigo_orden,
+                p.nombre as proveedor_nombre, 
+                p.rif as proveedor_rif
+            FROM cuentas_por_pagar cpp
+            JOIN compras c ON cpp.compra_id = c.id
+            JOIN proveedores p ON c.proveedor_id = p.id
+            WHERE cpp.id = ?
+        `;
+        const [cuentaResult] = await pool.query<RowDataPacket[]>(cuentaQuery, [id]);
+
+        if (cuentaResult.length === 0) {
+            return res.status(404).json({ success: false, message: 'Cuenta por pagar no encontrada.' });
+        }
+        const cuenta = cuentaResult[0];
+
+        const pagosQuery = `
+            SELECT 
+                pap.id, pap.fecha_pago, pap.monto_total_pagado, pap.observacion,
+                (
+                    SELECT JSON_ARRAYAGG(JSON_OBJECT(
+                        'metodo', mp.nombre, 
+                        'monto', dpp.monto, 
+                        'moneda', dpp.moneda, 
+                        'referencia', dpp.referencia
+                    ))
+                    FROM detalle_pagos_a_proveedores dpp
+                    JOIN metodos_pago mp ON dpp.metodo_pago_id = mp.id
+                    WHERE dpp.pago_id = pap.id
+                ) as detalles
+            FROM pagos_a_proveedores pap
+            WHERE pap.cuenta_por_pagar_id = ?
+            ORDER BY pap.fecha_pago DESC
+        `;
+        const [pagosResult] = await pool.query(pagosQuery, [id]);
+
+        res.json({ success: true, data: { ...cuenta, pagos: pagosResult } });
+
+    } catch (error) {
+        console.error(`--- ERROR EN GET /api/cuentas-por-pagar/${id} ---`, error);
+        res.status(500).json({ success: false, message: 'Error del servidor al obtener el detalle.' });
+    }
 });
 
-// Crear una nueva compra
-cuentasPorPagarRouter.post('/compras', authenticate(['admin', 'maestro']), audit('Crear Compra'), async (req: Request, res: Response) => {
-  const { proveedor_id, fecha, monto, productos, condiciones_pago } = req.body;
+// POST /api/cuentas-por-pagar/:id/pagos - Registrar un nuevo pago
+cuentasPorPagarRouter.post('/:id/pagos', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+    const { id: cuentaPorPagarId } = req.params;
+    const { fecha_pago, observacion, detalles } = req.body as PagoBody;
 
-  try {
-    const [result]: any[] = await pool.query(
-      `INSERT INTO compras (proveedor_id, fecha, monto, productos, condiciones_pago) VALUES (?, ?, ?, ?, ?)`,
-      [proveedor_id, fecha, monto, productos, condiciones_pago]
-    );
+    if (!fecha_pago || !detalles || detalles.length === 0) {
+        return res.status(400).json({ success: false, message: 'Faltan datos requeridos para el pago.' });
+    }
 
-    res.status(201).json({
-      success: true,
-      data: { id: result.insertId }
-    });
-  } catch (error) {
-    console.error('Error al crear compra:', error);
-    res.status(500).json({ success: false, message: 'Error interno al crear la compra' });
-  }
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+
+        const [cuentas] = await conn.query<RowDataPacket[]>("SELECT monto_pendiente, compra_id FROM cuentas_por_pagar WHERE id = ? FOR UPDATE", [cuentaPorPagarId]);
+        if (cuentas.length === 0) throw new Error('La cuenta por pagar no existe.');
+        
+        const montoPendienteActual = Number(cuentas[0].monto_pendiente);
+        const compraId = cuentas[0].compra_id;
+        
+        const montoTotalPagadoUSD = detalles.reduce((sum, detalle) => {
+            const tasa = detalle.moneda === 'VES' ? (detalle.tasa_cambio || 1) : 1;
+            if(tasa <= 0 && detalle.moneda === 'VES') throw new Error('La tasa de cambio no puede ser cero o negativa para pagos en VES.');
+            const montoEnUSD = detalle.moneda === 'VES' ? detalle.monto / tasa : detalle.monto;
+            return sum + montoEnUSD;
+        }, 0);
+
+        if (montoTotalPagadoUSD <= 0) throw new Error('El monto total del pago debe ser mayor a cero.');
+        if (montoTotalPagadoUSD > montoPendienteActual + 0.01) throw new Error('El pago no puede ser mayor al monto pendiente.');
+        
+        const [pagoResult] = await conn.query<ResultSetHeader>(
+            "INSERT INTO pagos_a_proveedores (cuenta_por_pagar_id, fecha_pago, monto_total_pagado, observacion) VALUES (?, ?, ?, ?)",
+            [cuentaPorPagarId, fecha_pago, montoTotalPagadoUSD, observacion || null]
+        );
+        const pagoId = pagoResult.insertId;
+
+        for (const detalle of detalles) {
+            await conn.query<ResultSetHeader>(
+                "INSERT INTO detalle_pagos_a_proveedores (pago_id, metodo_pago_id, monto, moneda, tasa_cambio, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                [pagoId, detalle.metodo_pago_id, detalle.monto, detalle.moneda, detalle.moneda === 'VES' ? detalle.tasa_cambio : 1, detalle.referencia || null]
+            );
+        }
+        
+        const nuevoMontoPendiente = montoPendienteActual - montoTotalPagadoUSD;
+        const nuevoEstado = nuevoMontoPendiente <= 0.01 ? 'pagada' : 'abonada';
+
+        await conn.query("UPDATE cuentas_por_pagar SET monto_pendiente = ?, estado = ? WHERE id = ?", [nuevoMontoPendiente, nuevoEstado, cuentaPorPagarId]);
+        
+        // Lógica de actualización de estado de la compra
+        if (nuevoEstado === 'pagada') {
+            await conn.query("UPDATE compras SET estado = 'pagada' WHERE id = ?", [compraId]);
+        }
+
+        await conn.commit();
+        res.status(201).json({ success: true, message: 'Pago registrado exitosamente.' });
+    } catch (error) {
+        await conn.rollback();
+        console.error(`--- ERROR EN POST /api/cuentas-por-pagar/${cuentaPorPagarId}/pagos ---`, error);
+        const err = error as Error;
+        res.status(500).json({ success: false, message: err.message || 'Error del servidor al registrar el pago.' });
+    } finally {
+        conn.release();
+    }
 });
 
-// Obtener todas las compras
-cuentasPorPagarRouter.get('/compras', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  try {
-    const [compras]: any[] = await pool.query(`SELECT * FROM compras`);
-    res.json({ success: true, data: compras });
-  } catch (error) {
-    console.error('Error al obtener compras:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener compras' });
-  }
-});
-
-// Crear un nuevo pago
-cuentasPorPagarRouter.post('/pagos', authenticate(['admin', 'maestro']), audit('Crear Pago'), async (req: Request, res: Response) => {
-  const { compra_id, fecha_pago, monto, metodo_pago, moneda } = req.body;
-
-  try {
-    const [result]: any[] = await pool.query(
-      `INSERT INTO pagos (compra_id, fecha_pago, monto, metodo_pago, moneda) VALUES (?, ?, ?, ?, ?)`,
-      [compra_id, fecha_pago, monto, metodo_pago, moneda]
-    );
-
-    res.status(201).json({
-      success: true,
-      data: { id: result.insertId }
-    });
-  } catch (error) {
-    console.error('Error al crear pago:', error);
-    res.status(500).json({ success: false, message: 'Error interno al crear el pago' });
-  }
-});
-
-// Obtener todos los pagos
-cuentasPorPagarRouter.get('/pagos', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  try {
-    const [pagos]: any[] = await pool.query(`SELECT * FROM pagos`);
-    res.json({ success: true, data: pagos });
-  } catch (error) {
-    console.error('Error al obtener pagos:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener pagos' });
-  }
-});
-
-// Generar reporte de cuentas por pagar
-cuentasPorPagarRouter.get('/reporte', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  try {
-    const pdfBuffer = await generarReporteCuentasPorPagar();
-
-    res.setHeader('Content-Disposition', 'attachment; filename="reporte_cuentas_por_pagar.pdf"');
-    res.setHeader('Content-Type', 'application/pdf');
-    res.send(pdfBuffer);
-  } catch (error) {
-    console.error('Error al generar reporte de cuentas por pagar:', error);
-    res.status(500).json({ success: false, message: 'Error interno al generar el reporte de cuentas por pagar' });
-  }
-});
 
 export default cuentasPorPagarRouter;

@@ -1,0 +1,5 @@
+﻿ID Producto,Nombre Producto,Categoría Principal,Marca,Línea,Unidad de Medida,Estado,Categorías Secundarias,Proveedores,ID Variante,Nombre Variante,Códigos de Barras,Cantidad,Precio
+21,Desodorante,Desodorante,Dioxogen,Antitraspirantes,gramos,activo,Categora Demo; Cremas,Martillo1; Martillo4; Cemento,1,Original,85454215489; 85546546456,90,5
+21,Desodorante,Desodorante,Dioxogen,Antitraspirantes,gramos,activo,Categora Demo; Cremas,Martillo1; Martillo4; Cemento,2,Talco,7425639858,90,5
+22,Talco,Talco,Talcosi o si,Pies limpios,gramos,activo,c; d,Martillo; Martillo4; Martillo3,3,Talco base,7887787; 541545,100,5
+22,Talco,Talco,Talcosi o si,Pies limpios,gramos,activo,c; d,Martillo; Martillo4; Martillo3,4,Talco especial,4553245345; 54454455,100,6

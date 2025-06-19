@@ -1,164 +1,127 @@
 import { Request, Response } from 'express';
 import pool from '../db';
 import { authenticate } from '../middleware/authMiddleware';
-import { generarReporteInventario } from '../services/reportes';
+import { ResultSetHeader } from 'mysql2/promise';
 
 const inventarioRouter = require('express').Router();
 
-// Crear un nuevo producto
-inventarioRouter.post('/productos', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  const { nombre, descripcion } = req.body;
-
+// Obtener vista detallada del inventario actual
+inventarioRouter.get('/', authenticate(['admin', 'maestro', 'operador']), async (req: Request, res: Response) => {
   try {
-    const [result]: any[] = await pool.query(
-      `INSERT INTO productos (nombre, descripcion) VALUES (?, ?)`,
-      [nombre, descripcion]
-    );
+    // --- CONSULTA SQL TOTALMENTE REESCRITA PARA MÁXIMA PRECISIÓN ---
+    const query = `
+      WITH LotesActivos AS (
+          SELECT
+              li.variante_id,
+              l.id AS lote_id,
+              l.numero_lote,
+              li.cantidad AS cantidad_en_lote,
+              p.id AS proveedor_id,
+              p.nombre AS proveedor_nombre,
+              l.fecha_vencimiento,
+              c.id AS compra_id,
+              c.estado AS compra_estado
+          FROM lotes_inventario li
+          JOIN lotes l ON li.lote_id = l.id
+          JOIN proveedores p ON l.proveedor_id = p.id
+          LEFT JOIN compras c ON l.compra_id = c.id
+          WHERE li.cantidad > 0
+      )
+      SELECT 
+          v.id AS variante_id,
+          v.nombre AS variante_nombre,
+          v.cantidad AS variante_contenido,
+          p.nombre AS producto_nombre,
+          m.nombre AS marca_nombre,
+          p.unidad_medida_base,
+          (SELECT SUM(la.cantidad_en_lote) FROM LotesActivos la WHERE la.variante_id = v.id AND (la.compra_estado IS NULL OR la.compra_estado != 'cancelada')) AS stock_total,
+          (SELECT JSON_ARRAYAGG(JSON_OBJECT(
+              'lote_id', la.lote_id,
+              'numero_lote', la.numero_lote,
+              'cantidad_en_lote', la.cantidad_en_lote,
+              'proveedor_id', la.proveedor_id,
+              'proveedor_nombre', la.proveedor_nombre,
+              'fecha_vencimiento', la.fecha_vencimiento,
+              'compra_id', la.compra_id,
+              'compra_estado', la.compra_estado
+          )) FROM LotesActivos la WHERE la.variante_id = v.id) AS lotes,
+          (SELECT COUNT(*) > 0 FROM LotesActivos la WHERE la.variante_id = v.id AND la.compra_estado = 'cancelada') AS tiene_lotes_anulados
+      FROM 
+          variantes v
+      JOIN 
+          productos p ON v.producto_id = p.id
+      JOIN 
+          marcas m ON p.marca_id = m.id
+      WHERE 
+          v.id IN (SELECT DISTINCT variante_id FROM LotesActivos);
+    `;
 
-    res.status(201).json({
-      success: true,
-      data: { id: result.insertId }
-    });
+    const [inventario] = await pool.query(query);
+    res.json({ success: true, data: inventario });
+
   } catch (error) {
-    console.error('Error al crear producto:', error);
-    res.status(500).json({ success: false, message: 'Error interno al crear el producto' });
+    console.error('Error al obtener inventario:', error);
+    res.status(500).json({ success: false, message: 'Error del servidor al obtener el inventario' });
   }
 });
 
-// Obtener todos los productos
-inventarioRouter.get('/productos', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  try {
-    const [productos]: any[] = await pool.query(`SELECT * FROM productos`);
-    res.json({ success: true, data: productos });
-  } catch (error) {
-    console.error('Error al obtener productos:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener productos' });
-  }
+// Registrar un ajuste de inventario (para anular lotes)
+inventarioRouter.post('/ajuste', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
+    const { lote_id, motivo } = req.body;
+    const usuario_id = (req as any).user.id;
+
+    if (!lote_id || !motivo) {
+        return res.status(400).json({ success: false, message: "El ID del lote y el motivo son requeridos." });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+
+        const [loteInventario]: any[] = await conn.query("SELECT id, variante_id, cantidad FROM lotes_inventario WHERE lote_id = ? FOR UPDATE", [lote_id]);
+
+        if (loteInventario.length === 0 || loteInventario[0].cantidad <= 0) {
+            await conn.rollback();
+            return res.status(404).json({ success: false, message: "El lote no existe en el inventario o ya no tiene stock." });
+        }
+
+        const { id: lote_inventario_id, variante_id, cantidad } = loteInventario[0];
+
+        await conn.query<ResultSetHeader>(
+            "INSERT INTO movimientos_inventario (variante_id, cantidad, tipo, motivo, usuario_id) VALUES (?, ?, 'salida', ?, ?)",
+            [variante_id, -cantidad, motivo, usuario_id]
+        );
+
+        await conn.query("UPDATE lotes_inventario SET cantidad = 0 WHERE id = ?", [lote_inventario_id]);
+
+        await conn.commit();
+        res.status(200).json({ success: true, message: "Ajuste de inventario realizado con éxito." });
+
+    } catch (error) {
+        await conn.rollback();
+        console.error("--- ERROR EN POST /api/inventario/ajuste ---", error);
+        res.status(500).json({ success: false, message: 'Error del servidor al realizar el ajuste.' });
+    } finally {
+        conn.release();
+    }
 });
 
-// Crear una nueva variante de producto
-inventarioRouter.post('/variantes', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  const { producto_id, nombre, precio, stock } = req.body;
-
+inventarioRouter.get('/stock/:variante_id', authenticate(['admin', 'maestro', 'operador', 'vendedor']), async (req: Request, res: Response) => {
+  const { variante_id } = req.params;
   try {
-    const [result]: any[] = await pool.query(
-      `INSERT INTO variantes (producto_id, nombre, precio, stock) VALUES (?, ?, ?, ?)`,
-      [producto_id, nombre, precio, stock]
-    );
-
-    // Registrar precio en el historial de precios
-    await pool.query(
-      `INSERT INTO historico_precios (variante_id, precio, moneda) VALUES (?, ?, 'USD')`,
-      [result.insertId, precio]
-    );
-
-    res.status(201).json({
-      success: true, 
-      data: { id: result.insertId }
-    });
+      const query = `
+          SELECT 
+              COALESCE(SUM(li.cantidad), 0) AS stock_total
+          FROM lotes_inventario li
+          JOIN lotes l ON li.lote_id = l.id
+          LEFT JOIN compras c ON l.compra_id = c.id
+          WHERE li.variante_id = ? AND (c.estado IS NULL OR c.estado != 'cancelada');
+      `;
+      const [rows]: any[] = await pool.query(query, [variante_id]);
+      res.json({ success: true, data: { stock: rows[0].stock_total || 0 } });
   } catch (error) {
-    console.error('Error al crear variante:', error);
-    res.status(500).json({ success: false, message: 'Error interno al crear la variante' });
+      console.error(`Error al obtener stock para la variante ${variante_id}:`, error);
+      res.status(500).json({ success: false, message: 'Error del servidor al obtener el stock.' });
   }
 });
-
-// Obtener todas las variantes de un producto
-inventarioRouter.get('/productos/:id/variantes', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  const { id } = req.params;
-
-  try {
-    const [variantes]: any[] = await pool.query(
-      `SELECT * FROM variantes WHERE producto_id = ?`,
-      [id]
-    );
-
-    res.json({ success: true, data: variantes });
-  } catch (error) {
-    console.error('Error al obtener variantes:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener variantes' });
-  }
-});
-
-// Registrar un movimiento de inventario
-inventarioRouter.post('/movimientos', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  const { variante_id, cantidad, tipo, motivo } = req.body;
-
-  try {
-    const [result]: any[] = await pool.query(
-      `INSERT INTO movimientos_inventario (variante_id, cantidad, tipo, motivo) VALUES (?, ?, ?, ?)`,
-      [variante_id, cantidad, tipo, motivo]
-    );
-
-    // Actualizar stock de la variante
-    await pool.query(
-      `UPDATE variantes SET stock = stock + ? WHERE id = ?`,
-      [tipo === 'entrada' ? cantidad : -cantidad, variante_id]
-    );
-
-    res.status(201).json({
-      success: true,
-      data: { id: result.insertId }
-    });
-  } catch (error) {
-    console.error('Error al registrar movimiento de inventario:', error);
-    res.status(500).json({ success: false, message: 'Error interno al registrar el movimiento de inventario' });
-  }
-});
-
-// Obtener todos los movimientos de inventario
-inventarioRouter.get('/movimientos', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  try {
-    const [movimientos]: any[] = await pool.query(`SELECT * FROM movimientos_inventario`);
-    res.json({ success: true, data: movimientos });
-  } catch (error) {
-    console.error('Error al obtener movimientos de inventario:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener movimientos de inventario' });
-  }
-});
-
-// Generar reporte de inventario
-inventarioRouter.get('/reporte', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  try {
-    const pdfBuffer = await generarReporteInventario();
-
-    res.setHeader('Content-Disposition', 'attachment; filename="reporte_inventario.pdf"');
-    res.setHeader('Content-Type', 'application/pdf');
-    res.send(pdfBuffer);
-  } catch (error) {
-    console.error('Error al generar reporte de inventario:', error);
-    res.status(500).json({ success: false, message: 'Error interno al generar el reporte de inventario' });
-  }
-});
-
-// Actualizar precio de una variante
-inventarioRouter.post('/variantes/precio', authenticate(['admin', 'maestro']), async (req: Request, res: Response) => {
-  const { variante_id, precio, moneda } = req.body;
-
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-
-    // Actualizar fecha_fin del precio anterior
-    await conn.query(
-      `UPDATE historico_precios SET fecha_fin = NOW() WHERE variante_id = ? AND fecha_fin IS NULL`,
-      [variante_id]
-    );
-
-    // Insertar nuevo precio en historico_precios
-    await conn.query(
-      `INSERT INTO historico_precios (variante_id, precio, moneda) VALUES (?, ?, ?)`,
-      [variante_id, precio, moneda]
-    );
-
-    await conn.commit();
-    res.status(200).json({ success: true, message: 'Precio actualizado correctamente' });
-  } catch (error) {
-    await conn.rollback();
-    console.error('Error al actualizar precio:', error);
-    res.status(500).json({ success: false, message: 'Error al actualizar precio' });
-  } finally {
-    conn.release();
-  }
-});
-
 export default inventarioRouter;
